@@ -1,0 +1,8 @@
+models :
+  - model_name: "EleutherAI/gpt-neo-2.7B"
+
+  - model_name: "openai-community/gpt2"
+
+  - model_name: "meta-llama/Llama-2-7b-hf"
+
+  - model_name: "google/gemma-7b"
