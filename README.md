@@ -1,11 +1,8 @@
 # LLMs Safeguard: Inference Guidance Away From Harmful Content
-Shachar Shmueli				Ori Kenig
-shmusha@post.bgu.ac.il			orike@post.bgu.ac.il
-316495035					207234949
-
-Evyatar Ozeiri				Semion Verzhik
-ozeiri@post.bgu.ac.il			Samverzhik@gmail.com
-308199876					316747401
+Shachar Shmueli  
+Ori Kenig  
+Evyatar Ozeri  
+Semion Verzhik  
 
 ## Abstract
 Large Language Models (LLMs) are powerful tools for generating new data by analyzing vast amounts of text and identifying patterns. A key strength is their ability to be "creative," enabling them to generate almost anything within the output space from human-like dialogue and stories to technical documents and synthetic datasets. This creative capability fuels innovation in areas like customer support, content generation, and AI training. However, this versatility also introduces risks. Adversarial actors can exploit LLMs to generate harmful content, including disinformation, hate speech, or phishing scams, and may attempt to "jailbreak" models, bypassing built-in safety measures to elicit inappropriate or dangerous outputs. Balancing creativity with robust safeguards is critical to responsibly harness their potential while mitigating these threats.
