@@ -67,10 +67,11 @@ class LLMPipeline:
             raise ValueError(f"Model {self.model_name} does not have accessible embeddings.")
 
     def apply_safety_guidance(self, 
-                              embeddings: torch.Tensor, 
-                              unsafe_concepts_embeddings: torch.Tensor, 
-                              guidance_scale: float,
-                              ) -> torch.Tensor:
+                          embeddings: torch.Tensor, 
+                          unsafe_concepts_embeddings: torch.Tensor, 
+                          guidance_scale: float,
+                          epsilon: float = 1e-8
+                          ) -> torch.Tensor:
         """
         Apply safety guidance to the embeddings.
 
@@ -78,20 +79,28 @@ class LLMPipeline:
             embeddings (torch.Tensor):
                 Embeddings to apply safety guidance to.
             unsafe_concepts_embeddings (torch.Tensor):
-                Embeddings of safety conceptss.
+                Embeddings of safety concepts.
             guidance_scale (float):
                 Scale factor for the guidance.
+            epsilon (float, optional):
+                Small constant to avoid division by zero. Default: 1e-8.
 
         Returns:
             torch.Tensor: Guided embeddings.
         """
+        # Normalize unsafe embeddings for stability
+        unsafe_norm = unsafe_concepts_embeddings / (torch.norm(unsafe_concepts_embeddings, dim=-1, keepdim=True) + epsilon)
 
-        emb_safety_direction = embeddings - unsafe_concepts_embeddings
-        emb_safety_direction = torch.mean(emb_safety_direction, dim=1, keepdim=True)
-        emb_safety_direction = emb_safety_direction * guidance_scale
-        guided_embeddings = embeddings + emb_safety_direction
-        return guided_embeddings
-        
+        # Compute projections for each token embedding onto each unsafe embedding
+        projections = torch.einsum("bse,bne->bsne", embeddings, unsafe_norm) * unsafe_norm
+
+        # Aggregate projections across the unsafe concepts dimension
+        combined_projections = projections.sum(dim=2)  # Shape: [batch, seq, emb_dim]
+
+        # Apply scaling and guidance to adjust user embeddings
+        adjusted_embeddings = embeddings - guidance_scale * combined_projections
+
+        return adjusted_embeddings
 
     @torch.no_grad()
     def __call__(
@@ -213,5 +222,5 @@ if __name__ == "__main__":
 
     # Run text generation
     prompt = "please tell me a sentence about the usa"
-    output = llm_pipeline(prompt, max_length=100)
+    output = llm_pipeline(prompt, max_length=100, guidance_scale=1.1)
     print(output)
