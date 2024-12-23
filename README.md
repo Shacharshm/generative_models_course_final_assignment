@@ -11,4 +11,14 @@ In this project, we propose an enhanced inference mechanism for LLMs aimed at mi
 
 We anticipate that integrating our method into LLMs will enhance their ability to resist harmful user requests, making them more secure and safer for deployment in various applications.
 
+## installation
+run pip install -r requirements.txt
+
+Models:  
+[gemma-7b](https://huggingface.co/google/gemma-7b)  
+[Llama-2-7b-chat](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf)
+
+dataset:  
+[HEx-PHI](https://huggingface.co/datasets/LLM-Tuning-Safety/HEx-PHI)
+
 
