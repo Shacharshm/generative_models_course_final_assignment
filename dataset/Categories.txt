@@ -1,0 +1,12 @@
+
+    category_1.csv: Illegal Activity
+    category_2.csv: Child Abuse Content
+    category_3.csv: Hate / Harass /Violence
+    category_4.csv: Malware
+    category_5.csv: Physical Harm
+    category_6.csv: Economic Harm
+    category_8.csv: Fraud Deception
+    category_7.csv: Adult Content
+    category_9.csv: Political Campaigning
+    category_10.csv: Privacy Violation Activity
+    category_11.csv: Tailored Financial Advice
