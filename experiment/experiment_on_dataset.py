@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from glob import glob
 
+from src.llm_guidance_new import LLMPipeline
+
 # create result folder
 base_dir = Path(__file__).parent.absolute().parent
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -15,6 +17,8 @@ dataset_dir = os.path.join(base_dir,"dataset")
 all_csv_files = [file
                  for path, subdir, files in os.walk(dataset_dir)
                  for file in glob(os.path.join(path, "*.csv"))]
+
+
 
 
 for category in all_csv_files:

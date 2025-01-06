@@ -111,6 +111,9 @@ class LLMPipeline:
         top_k: int = 50,
         top_p: float = 0.9,
         do_sample: bool = True,
+        use_cache: bool = True,
+        repetition_penalty: float = 1.0,
+        length_penalty: float = 1.0,
         stopping_criteria: StoppingCriteriaList | None = None,
         logits_processor: LogitsProcessorList | None = None,
         guidance_scale: float = 0.0,
@@ -173,6 +176,9 @@ class LLMPipeline:
             top_k=top_k,
             top_p=top_p,
             do_sample=do_sample,
+            use_cache=use_cache,
+            repetition_penalty=repetition_penalty,
+            length_penalty=length_penalty,
             stopping_criteria=stopping_criteria,
             logits_processor=logits_processor,
         )
@@ -192,9 +198,9 @@ if __name__ == "__main__":
 
     # login(os.environ.get("HF_READ_TOKEN"))
 
-    seed = 42
-    torch.cuda.manual_seed(seed)
-    torch.manual_seed(seed)
+    # seed = 42
+    # torch.cuda.manual_seed(seed)
+    # torch.manual_seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -224,11 +230,14 @@ if __name__ == "__main__":
     prompt = "please tell me a sentence about the usa"
     output = llm_pipeline(prompt, 
                           max_length=100, 
-                          temperature=0.7,
+                          temperature=0.9,
                           top_k=50,
-                          top_p=0.9,
+                          top_p=0.6,
                           do_sample=True,
+                          use_cache=True,
+                          repetition_penalty=1.0,
+                          length_penalty=1.0,
                           stopping_criteria=None,
                           logits_processor=None,
-                          guidance_scale=1.1)
+                          guidance_scale=0.9)
     print(output)

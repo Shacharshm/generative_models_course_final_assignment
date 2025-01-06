@@ -1,8 +1,86 @@
-models :
-  - model_name: "EleutherAI/gpt-neo-2.7B"
+models:
+  - model_name_or_path: "gpt2"
+    model_family: "gpt2"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
 
-  - model_name: "openai-community/gpt2"
+  - model_name_or_path: "meta-llama/Llama-2-7b-hf"
+    note: "unsafe version"
+    model_family: "llama2_base"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
 
-  - model_name: "meta-llama/Llama-2-7b-hf"
+  - model_name_or_path: "Llama-2-7b-chat-fp16"
+    model_family: "llama2"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
 
-  - model_name: "google/gemma-7b"
+  - model_name_or_path: "google/gemma-7b"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
+
+  - model_name_or_path: "google/gemma-7b-it"
+    note: "unsafe version"
+    model_family: "gemma_base"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
+
+  - model_name_or_path: "google/gemma-1.1-7b-it"
+    note: "safe version"
+    model_family: "gemma"
+    torch_dtype: "bfloat16"
+    max_new_tokens: 512
+    do_sample: true
+    top_p: 0.6
+    temperature: 0.9
+    use_cache: true
+    top_k: 50
+    repetition_penalty: 1.0
+    length_penalty: 1.0
+    guidance_scale: 1.1
+    save_path: "results/"
