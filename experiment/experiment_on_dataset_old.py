@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from glob import glob
 
-from src.llm_guidance_new import LLMPipeline
+from llm_guidance_old import LLMPipeline
 
 # create result folder
 base_dir = Path(__file__).parent.absolute().parent
