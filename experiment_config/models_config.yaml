@@ -12,6 +12,9 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
 
   - model_name_or_path: "meta-llama/Llama-2-7b-hf"
     note: "unsafe version"
@@ -27,6 +30,9 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
 
   - model_name_or_path: "Llama-2-7b-chat-fp16"
     model_family: "llama2"
@@ -41,6 +47,9 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
 
   - model_name_or_path: "google/gemma-7b"
     torch_dtype: "bfloat16"
@@ -54,6 +63,9 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
 
   - model_name_or_path: "google/gemma-7b-it"
     note: "unsafe version"
@@ -69,6 +81,9 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
 
   - model_name_or_path: "google/gemma-1.1-7b-it"
     note: "safe version"
@@ -84,3 +99,6 @@ models:
     length_penalty: 1.0
     guidance_scale: 1.1
     save_path: "results/"
+    eval_template: "plain"
+    safety_bench: "test"
+    num_of_reps: 1
