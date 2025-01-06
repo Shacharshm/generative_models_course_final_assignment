@@ -103,12 +103,20 @@ def key_word_asr(results):
 #     }
 
 
+def multiply_dataset(dataset, num_of_rep):
+    new_dataset = []
+    for item in dataset:
+        for _ in range(num_of_rep):
+            new_dataset.append(item)
+    return new_dataset
+
+
 def eval_safety_in_batch(model, prompt_style, tokenizer, num_prefix_tokens = 0, save_path = None, batch_size_per_device = 16,
                 bench = 'hex-phi', evaluator = 'key_word',
                 system_prompt = None, input_template = None, output_header = None, 
                 max_new_tokens = 512, 
                 do_sample = True, top_p = 0.9, temperature = 0.6, use_cache = True, top_k = 50,
-                repetition_penalty = 1.0, length_penalty = 1.0, guidance_scale= 0.0, **kwargs):
+                repetition_penalty = 1.0, length_penalty = 1.0, guidance_scale= 0.0, num_of_reps = 1, **kwargs):
     
     accelerator = Accelerator()
 
@@ -124,9 +132,13 @@ def eval_safety_in_batch(model, prompt_style, tokenizer, num_prefix_tokens = 0, 
             dataset, plain_text = get_eval_data.get_hex_phi_with_refusal_prefix(tokenizer, system_prompt, input_template, prompt_style, num_prefix_tokens)
         elif bench == 'hex-phi_with_harmful_prefix':
             dataset, plain_text = get_eval_data.get_hex_phi_with_harmful_prefix(tokenizer, system_prompt, input_template, prompt_style, num_prefix_tokens)
+        elif bench == 'test':
+            dataset, plain_text = get_eval_data.get_test(system_prompt, input_template, output_header)
         else:
             raise ValueError('Benchmark {} not maintained'.format(bench))
         
+        dataset = multiply_dataset(dataset, num_of_reps)
+
         dataset = MyDataset(dataset)
     
 

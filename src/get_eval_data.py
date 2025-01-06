@@ -42,7 +42,40 @@ def get_hex_phi(system_prompt = None, input_template = None,
     return conversation_data, dataset
 
 
+def get_test(system_prompt = None, input_template = None, 
+                output_header = None, split = 'test'):
+    
+    
+    
+    dataset = []
+    with open('dataset/data/HEx-PHI_test.jsonl', 'r') as file:
+        for line in file:
+            data = json.loads(line)
+            dataset.append( (data['instruction'], data['category']) )
+    
+    conversation_data = []
 
+    for item in dataset:
+
+        messages = []
+
+        if system_prompt is not None:
+            messages.append( {'role': 'system', 'content': system_prompt} )
+        
+        if input_template is not None:
+            messages.append( {'role': 'user', 'content': input_template % item[0], 'category': item[1]} )
+        else:
+            messages.append( {'role': 'user', 'content': item[0], 'category': item[1]} )
+        
+        if output_header is not None:
+            messages.append({'role': 'assistant', 'content': output_header})
+        else:
+            messages.append({'role': 'assistant', 'content': ''})
+
+        
+        conversation_data.append(messages)
+    
+    return conversation_data, dataset
 
 
 def get_hex_phi_backdoor(system_prompt = None, input_template = None, 

@@ -21,6 +21,7 @@ class ScriptArguments:
     evaluator: str = field(default="key_word", metadata={"help": "the evaluator"})
     save_path: str = field(default=None, metadata={"help": "the save path"})
     eval_template: str = field(default="plain", metadata={"help": "the eval template"})
+    num_of_reps: int = field(default=1, metadata={"help": "the number of times to repeat each prompt"})
 
 
     batch_size_per_device: int = field(default=16, metadata={"help": "the batch size"})
@@ -60,7 +61,10 @@ if __name__ == "__main__":
         "repetition_penalty": 1.0,
         "length_penalty": 1.0,
         "guidance_scale": 1.1,
-        "save_path": "results/"
+        "save_path": "results/",
+        "eval_template": "alpaca",
+        "safety_bench": "test",
+        "num_of_reps": 1,
     }
 
     parser = HfArgumentParser((ScriptArguments, ModelConfig))
@@ -106,7 +110,8 @@ if __name__ == "__main__":
                 system_prompt = system_prompt, input_template = input_template, output_header = output_header,
                 max_new_tokens = args.max_new_tokens, 
                 do_sample = args.do_sample, top_p = args.top_p, temperature = args.temperature, use_cache = args.use_cache, top_k = args.top_k,
-                repetition_penalty = args.repetition_penalty, length_penalty = args.length_penalty, guidance_scale= args.guidance_scale)
+                repetition_penalty = args.repetition_penalty, length_penalty = args.length_penalty, guidance_scale= args.guidance_scale,
+                num_of_reps = args.num_of_reps)
     
     
     save_path = f"{args.save_path}{args.model_family}/{args.safety_bench}/{'guidance_scale-' + str(args.guidance_scale) if args.guidance_scale > 1.0 else 'no_guidance'}/"
@@ -119,9 +124,12 @@ if __name__ == "__main__":
     with open(save_path + 'log.json', 'w') as f:
         json.dump(log, f)
 
+    answer_index = -1
+    prompt_index = 1 if results[0][0]['role'] == 'system' else 0
+
     rows = []
     for result in results:
-        Q, A = result[0], result[-1]
+        Q, A = result[prompt_index], result[answer_index]
         rows.append({'input': Q['content'], 
                      'output': A['content'], 
                      'user_role': Q['role'], 
