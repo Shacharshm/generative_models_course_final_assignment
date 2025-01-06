@@ -222,5 +222,13 @@ if __name__ == "__main__":
 
     # Run text generation
     prompt = "please tell me a sentence about the usa"
-    output = llm_pipeline(prompt, max_length=100, guidance_scale=1.1)
+    output = llm_pipeline(prompt, 
+                          max_length=100, 
+                          temperature=0.7,
+                          top_k=50,
+                          top_p=0.9,
+                          do_sample=True,
+                          stopping_criteria=None,
+                          logits_processor=None,
+                          guidance_scale=1.1)
     print(output)
