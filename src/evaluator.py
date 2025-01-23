@@ -163,7 +163,6 @@ def eval_safety_in_batch(model, prompt_style, tokenizer, num_prefix_tokens = 0, 
     
 
     results = []
-    cnt = 0
 
     now = time.time()
     for batch in tqdm(data_loader):
@@ -173,11 +172,11 @@ def eval_safety_in_batch(model, prompt_style, tokenizer, num_prefix_tokens = 0, 
             
             batch_input_sample = batch
 
-            
-            output_texts, full_texts = Generator.generate_one_shot_in_batch(inputs = batch_input_sample, accelerator = accelerator,
-                                            max_new_tokens = max_new_tokens, do_sample = do_sample, top_p = top_p, temperature = temperature, 
-                                            use_cache = use_cache, top_k = top_k, repetition_penalty = repetition_penalty, 
-                                            length_penalty = length_penalty, guidance_scale=guidance_scale, **kwargs)
+    
+            output_texts = Generator.generate_one_shot_in_batch(inputs = batch_input_sample, accelerator = accelerator,
+                                                    max_new_tokens = max_new_tokens, do_sample = do_sample, top_p = top_p, temperature = temperature, 
+                                                    use_cache = use_cache, top_k = top_k, repetition_penalty = repetition_penalty, 
+                                                    length_penalty = length_penalty, guidance_scale=guidance_scale, **kwargs)
 
             accelerator.wait_for_everyone()
 
@@ -185,98 +184,18 @@ def eval_safety_in_batch(model, prompt_style, tokenizer, num_prefix_tokens = 0, 
             
             num_samples = len(output_texts)
             for i in range(num_samples):
-
-                len_output = len(output_texts[i])
-                Question = full_texts[i][:len(full_texts[i]) - len_output]
+            
                 Answer = output_texts[i]
 
                 results.append( batch_input_sample[i] + [{'role' : 'assistant', 'content' : Answer}] )
 
-                
-                
-                if accelerator.is_local_main_process:
-                    print(f'>>> Example - {i+1}')
-
-                    print('Q :', Question)
-                    print('\n')
-
-                    print('A :', Answer)
-                    print('\n')
-                    print('----------------')
-    
     time_taken = time.time() - now
     print(f'Time taken to generate for all data: {time_taken} seconds')
 
-
-
-
-    results_serialized = torch.tensor( bytearray( json.dumps(results).encode('utf-8') ), dtype=torch.uint8 ).to(accelerator.device)
-    results_serialized = results_serialized.unsqueeze(0)
-    results_serialized = accelerator.pad_across_processes(results_serialized, dim=1, pad_index=0)
-    gathered_padded_tensors = accelerator.gather(results_serialized).cpu()
-
-
-    if accelerator.is_local_main_process:
-
-        results_all = []
-        idx = 0
-        for t in gathered_padded_tensors:
-            idx += 1
-            data = t.numpy().tobytes().rstrip(b'\x00')
-            results_all += json.loads(data.decode('utf-8'))
-        
-        results = results_all
-
-        results_deduplicated = []
-        evaluated_instances = set()
-
-        for i, item in enumerate(results):
-            
-            print('\n\n\n')
-
-            print(f'>>> Example - {i+1}')
-
-            Q = item[1]['content'] if item[1]['role'] == 'user' else item[0]['content']
-            A = item[-1]['content']
-
-            print('Q :', Q)
-            print('\n')
-
-            print('A :', A)
-            print('----------------')
-
-            
-            print('\n\n\n')
-
-            if Q not in evaluated_instances:
-                results_deduplicated.append(item)
-                evaluated_instances.add(Q)
-        
-        results = results_deduplicated
-
-        if evaluator == 'none':
-            metric = None    
-        elif evaluator == 'key_word':
-            metric = key_word_asr(results)
-        elif evaluator == 'chatgpt':
-            pass
-            # metric = chatgpt_asr(plain_text, results)
-        else:
-            raise ValueError('Evaluator {} not maintained'.format(evaluator))
-        
-        log = {
+    log = {
             'results' : results,
-            'metrics' : metric,
+            # 'metrics' : metric,
             'time_taken' : time_taken
         }
-
-        print(metric)
-
-        # if save_path is not None:
-        #     import os
-        #     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        #     with open(save_path, 'w') as f:
-        #         json.dump(log, f)
-
-        return log
-        
+    
+    return log

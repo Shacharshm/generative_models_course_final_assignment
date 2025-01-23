@@ -8,7 +8,7 @@ from huggingface_hub import login
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from llm_guidance_old import LLMPipeline
+from llm_guidance import LLMPipeline
 
 # create result folder
 base_dir = Path(__file__).parent.absolute().parent

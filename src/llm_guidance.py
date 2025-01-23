@@ -1,147 +1,178 @@
-import json
-import os
-import pandas as pd
+import time
 import torch
 import logging
 
-from trl import ModelConfig, get_kbit_device_map, get_peft_config, get_quantization_config
-from dataclasses import dataclass, field
-from transformers import HfArgumentParser
-from models import get_model
-from src import evaluator
+from transformers import PreTrainedTokenizer, PreTrainedModel
+from transformers import LogitsProcessorList, StoppingCriteriaList
 
 logging.basicConfig(level=logging.INFO)
 
-@dataclass
-class ScriptArguments:
 
-    safety_bench: str = field(default="hex-phi", metadata={"help": "the safety benchmark"})
-    model_family: str = field(default="llama2", metadata={"help": "the model family"})
-    prompt_style: str = field(default="llama2", metadata={"help": "the string prompt style"})
-    evaluator: str = field(default="key_word", metadata={"help": "the evaluator"})
-    save_path: str = field(default=None, metadata={"help": "the save path"})
-    eval_template: str = field(default="plain", metadata={"help": "the eval template"})
-    num_of_reps: int = field(default=1, metadata={"help": "the number of times to repeat each prompt"})
+class LLMPipeline:
+    """
+    Custom pipeline for large language model (LLM) inference. This pipeline provides an interface for handling
+    text generation tasks with custom options for memory optimization, decoding strategies, and preprocessing.
 
+    Args:
+        model (PreTrainedModel):
+            Pretrained LLM (e.g., GPT, OPT, BLOOM).
+        tokenizer (PreTrainedTokenizer):
+            Tokenizer associated with the LLM.
+        scheduler (Optional[object]):
+            (Optional) A scheduler to manage dynamic behaviors during inference.
+    """
 
-    batch_size_per_device: int = field(default=16, metadata={"help": "the batch size"})
-    max_new_tokens: int = field(default=512, metadata={"help": "the maximum number of new tokens"})
-    do_sample: bool = field(default=True, metadata={"help": "do sample"})
-    top_p: float = field(default=0.6, metadata={"help": "top p"})
-    temperature: float = field(default=0.9, metadata={"help": "temperature"})
-    use_cache: bool = field(default=True, metadata={"help": "use cache"})
-    top_k: int = field(default=50, metadata={"help": "top k"})
-    repetition_penalty: float = field(default=1.0, metadata={"help": "repetition penalty"})
-    length_penalty: float = field(default=1.0, metadata={"help": "length penalty"})
-    guidance_scale: float = field(default=0.0, metadata={"help": "guidance scale"})
+    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, scheduler: object | None = None):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.scheduler = scheduler
 
-    # applied when evaluating the prefilling of a certain prefix
-    prefill_prefix: str = field(default=None, metadata={"help": "the prefill prefix"})
+        self.unsafe_conceptss: str | None = 'hate, harassment, violence, suffering, humiliation, harm, suicide, ' \
+                                        'sexual, nudity, bodily fluids, blood, obscene gestures, illegal activity, ' \
+                                        'drug use, theft, vandalism, weapons, child abuse, brutality, cruelty'
 
-    # applied when evaluating the prefilling of a certain number of tokens
-    num_perfix_tokens: int = field(default=0, metadata={"help": "the number of prefix tokens"})
+        self.logger = self.get_logger()
 
+        # Register the components
+        self.register_modules(model=model, tokenizer=tokenizer, scheduler=scheduler)
 
-# Example Usage
-if __name__ == "__main__":
-    from huggingface_hub import login
+    def get_logger(self):
+        """Returns a logger for the pipeline."""
+        logger = logging.getLogger("LLMPipeline")
+        logger.setLevel(logging.INFO)
+        return logger
 
-    # login()
+    def register_modules(self, **kwargs):
+        """Registers components of the pipeline."""
+        for name, module in kwargs.items():
+            setattr(self, name, module)
 
-    model_info = {
-        "model_name_or_path": "gpt2",
-        "model_family": "gpt2",
-        "torch_dtype": "bfloat16",
-        "max_new_tokens": 512,
-        "do_sample": True,
-        "top_p": 0.6,
-        "temperature": 0.9,
-        "use_cache": True,
-        "top_k": 50,
-        "repetition_penalty": 1.0,
-        "length_penalty": 1.0,
-        "guidance_scale": 0.0,
-        "save_path": "results/",
-        "eval_template": "plain",
-        "safety_bench": "test",
-        "num_of_reps": 1,
-    }
+    def get_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
+        if hasattr(self.model, 'transformer'):
+            # GPT-like models (e.g., GPT-2, GPT-J)
+            return self.model.transformer.wte(input_ids)
+        elif hasattr(self.model, 'encoder'):
+            # T5-like models
+            return self.model.encoder.embed_tokens(input_ids)
+        elif hasattr(self.model, 'embeddings'):
+            # BERT-like models
+            return self.model.embeddings.word_embeddings(input_ids)
+        elif hasattr(self.model, 'model'):
+            # Assuming google/gemma-7b has a 'model' attribute for embeddings
+            return self.model.model.embed_tokens(input_ids)
+        elif hasattr(self.model, 'embed_tokens'):
+            # LLaMA-like models
+            return self.model.embed_tokens(input_ids)
+        else:
+            raise ValueError(f"Model {self.model_name} does not have accessible embeddings.")
 
-    parser = HfArgumentParser((ScriptArguments, ModelConfig))
-    args, model_config = parser.parse_dict(model_info)
+    def apply_safety_guidance(self, 
+                          embeddings: torch.Tensor, 
+                          unsafe_concepts_embeddings: torch.Tensor, 
+                          guidance_scale: float,
+                          epsilon: float = 1e-8
+                          ) -> torch.Tensor:
+        """
+        Apply safety guidance to the embeddings.
 
-    torch_dtype = (
-        model_config.torch_dtype
-        if model_config.torch_dtype in ["auto", None]
-        else getattr(torch, model_config.torch_dtype)
-    )
-    
-    print(f"torch_dtype: {torch_dtype}")
-    quantization_config = get_quantization_config(model_config)
-    model_kwargs = dict(
-        revision=model_config.model_revision,
-        trust_remote_code=model_config.trust_remote_code,
-        attn_implementation=model_config.attn_implementation,
-        torch_dtype=torch_dtype,
-        use_cache=False,
-        device_map=get_kbit_device_map() if quantization_config is not None else None,
-        quantization_config=quantization_config,
-    )
+        Args:
+            embeddings (torch.Tensor):
+                Embeddings to apply safety guidance to.
+            unsafe_concepts_embeddings (torch.Tensor):
+                Embeddings of safety concepts.
+            guidance_scale (float):
+                Scale factor for the guidance.
+            epsilon (float, optional):
+                Small constant to avoid division by zero. Default: 1e-8.
 
-    model, tokenizer = get_model.get_model(model_config.model_name_or_path, model_kwargs, model_family=args.model_family, padding_side="left")
-    model.eval()
-    
-    eval_template = evaluator.common_eval_template[args.eval_template]
-    system_prompt, input_template, output_header = eval_template['system_prompt'], eval_template['input_template'], eval_template['output_header']
+        Returns:
+            torch.Tensor: Guided embeddings.
+        """
+        # Normalize unsafe embeddings for stability
+        unsafe_norm = unsafe_concepts_embeddings / (torch.norm(unsafe_concepts_embeddings, dim=-1, keepdim=True) + epsilon)
 
-    if args.prefill_prefix is not None and args.num_perfix_tokens > 0:
-        raise ValueError("prefill_prefix and num_perfix_tokens should not be used together")
+        # Compute projections for each token embedding onto each unsafe embedding
+        projections = torch.einsum("bse,bne->bsne", embeddings, unsafe_norm) * unsafe_norm
 
-    if args.prefill_prefix is not None:
-        output_header = args.prefill_prefix
-    
-    if args.num_perfix_tokens > 0 and (args.safety_bench not in ["hex-phi_with_refusal_prefix", 'hex-phi_with_harmful_prefix']):
-        raise ValueError("num_perfix_tokens should only be used with hex-phi_with_refusal_prefix or hex-phi_with_harmful_prefix")
+        # Aggregate projections across the unsafe concepts dimension
+        combined_projections = projections.sum(dim=2)  # Shape: [batch, seq, emb_dim]
 
-    
-    log = evaluator.eval_safety_in_batch(model, args.prompt_style, tokenizer, num_prefix_tokens = args.num_perfix_tokens, 
-                save_path = args.save_path, batch_size_per_device = args.batch_size_per_device,
-                bench = args.safety_bench, evaluator = args.evaluator,
-                system_prompt = system_prompt, input_template = input_template, output_header = output_header,
-                max_new_tokens = args.max_new_tokens, 
-                do_sample = args.do_sample, top_p = args.top_p, temperature = args.temperature, use_cache = args.use_cache, top_k = args.top_k,
-                repetition_penalty = args.repetition_penalty, length_penalty = args.length_penalty, guidance_scale= args.guidance_scale,
-                num_of_reps = args.num_of_reps)
-    
-    
-    save_path = f"{args.save_path}{args.model_family}/{args.safety_bench}/{'guidance_scale-' + str(args.guidance_scale) if args.guidance_scale > 1.0 else 'no_guidance'}/"
+        # Apply scaling and guidance to adjust user embeddings
+        adjusted_embeddings = embeddings - guidance_scale * combined_projections
 
-    log['hyperparameters'] = model_info
-    results = log.pop('results')
+        return adjusted_embeddings
 
+    @torch.no_grad()
+    def __call__(
+        self,
+        prompt: str,
+        instructions: str | None = None,
+        max_new_tokens: int = 512,
+        temperature: float = 0.7,
+        top_k: int = 50,
+        top_p: float = 0.9,
+        do_sample: bool = True,
+        use_cache: bool = True,
+        repetition_penalty: float = 1.0,
+        length_penalty: float = 1.0,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        guidance_scale: float = 0.0,
+    ) -> str:
 
-    os.makedirs(os.path.dirname(save_path + 'log.json'), exist_ok=True)
-    with open(save_path + 'log.json', 'w') as f:
-        json.dump(log, f)
-
-    answer_index = -1
-    prompt_index = 1 if results[0][0]['role'] == 'system' else 0
-
-    rows = []
-    for result in results:
-        Q, A = result[prompt_index], result[answer_index]
-        rows.append({'input': Q['content'], 
-                     'output': A['content'], 
-                     'user_role': Q['role'], 
-                     'model_role': A['role'], 
-                     'category': Q['category'], 
-                     'score': None},
-                     )
-    
-    result_df = pd.DataFrame(rows)
-    os.makedirs(os.path.dirname(save_path + 'results.csv'), exist_ok=True)
-    result_df.to_csv(save_path + 'results.csv', index=False)
-    
+        
+        enable_safety_guidance = True
+        if guidance_scale < 1:
+            enable_safety_guidance = False
+            self.logger.warning('You have disabled safety guidance.')
 
 
-    
+        # Tokenize the input prompt
+        input_ids = self.tokenizer(prompt, padding = True, return_tensors="pt").input_ids
+        input_ids = input_ids.to(self.model.device)
+        input_embeddings = self.get_embeddings(input_ids)
+
+        if enable_safety_guidance:
+            unsafe_concepts_ids = self.tokenizer(self.unsafe_conceptss, return_tensors="pt").input_ids
+            unsafe_concepts_ids = unsafe_concepts_ids.to(self.model.device)
+            unsafe_concepts_embeddings = self.get_embeddings(unsafe_concepts_ids)
+
+            input_embeddings = self.apply_safety_guidance(
+                embeddings=input_embeddings,
+                unsafe_concepts_embeddings=unsafe_concepts_embeddings,
+                guidance_scale=guidance_scale,
+            )
+        
+        if instructions:
+            # Tokenize the instructions
+            instructions_ids = self.tokenizer(instructions, padding = True, return_tensors="pt").input_ids
+            instructions_ids = instructions_ids.to(self.model.device)
+            instructions_embeddings = self.get_embeddings(instructions_ids)
+
+            input_embeddings = torch.cat([instructions_embeddings, input_embeddings], dim=1)
+ 
+
+        time_start = time.time()
+
+        # Pass embeddings through the model
+        outputs = self.model.generate(
+            # input_ids=input_ids,
+            inputs_embeds=input_embeddings,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            do_sample=do_sample,
+            use_cache=use_cache,
+            repetition_penalty=repetition_penalty,
+            length_penalty=length_penalty,
+            stopping_criteria=stopping_criteria,
+            logits_processor=logits_processor,
+        )
+
+        print(f"Time taken: {time.time() - time_start:.2f} seconds")
+
+        # Decode and return the generated text
+        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        self.logger.info("------------ start of generated text ------------")
+        return generated_text

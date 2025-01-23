@@ -1,3 +1,4 @@
+import re
 import torch
 
 class Chat:
@@ -146,7 +147,9 @@ class Chat:
         # no history will be maintained for one-shot conversation
         # this function is for batch inference to accelerate the evaluation
         
-        inputs_processed = []
+        user_input_processed = []
+        system_input_processed = []
+        assistant_prompt_processed = []
 
         enable_safety_guidance = True
         if guidance_scale < 1:
@@ -162,32 +165,49 @@ class Chat:
             else:
                 raise ValueError(f"input {item} is not a valid conversation input")
             
-            item_processed = self.string_formatter({'messages': item_processed})['text']
+            
+            for role in item_processed:
+                if role['role'] == 'user':
+                    user_input_processed.append(role['content'])
+                elif role['role'] == 'system':
+                    system_input_processed.append(role['content'])
+                elif role['role'] == 'assistant':
+                    assistant_prompt_processed.append(role['content'])
 
-            inputs_processed.append(item_processed)
+        if len(user_input_processed) != 0:
+            user_prompt_inputs = self.tokenizer(user_input_processed, padding = True, return_tensors="pt").to(self.model.device)
+            user_prompt_embeddings = self.get_embeddings(user_prompt_inputs["input_ids"])
+
+            if enable_safety_guidance:
+                unsafe_concepts_ids = self.tokenizer(self.unsafe_concepts, return_tensors="pt").input_ids
+                unsafe_concepts_ids = unsafe_concepts_ids.to(self.model.device)
+                unsafe_concepts_embeddings = self.get_embeddings(unsafe_concepts_ids)
+                
+                user_prompt_embeddings = self.apply_safety_guidance(
+                    embeddings=user_prompt_embeddings,
+                    unsafe_concepts_embeddings=unsafe_concepts_embeddings,
+                    guidance_scale=guidance_scale,
+                )
         
-
-        model_inputs = self.tokenizer(inputs_processed, padding = True, return_tensors="pt").to(self.model.device)
-
-        input_embeddings = self.get_embeddings(model_inputs["input_ids"])
-
-        if enable_safety_guidance:
-            unsafe_concepts_ids = self.tokenizer(self.unsafe_concepts, return_tensors="pt").input_ids
-            unsafe_concepts_ids = unsafe_concepts_ids.to(self.model.device)
-            unsafe_concepts_embeddings = self.get_embeddings(unsafe_concepts_ids)
-
-            input_embeddings = self.apply_safety_guidance(
-                embeddings=input_embeddings,
-                unsafe_concepts_embeddings=unsafe_concepts_embeddings,
-                guidance_scale=guidance_scale,
-            )
+        if len(system_input_processed) != 0:
+            system_prompt_inputs = self.tokenizer(system_input_processed, padding = True, return_tensors="pt").to(self.model.device)
+            system_prompt_embeddings = self.get_embeddings(system_prompt_inputs["input_ids"])
+        else:
+            system_prompt_embeddings = None
         
-        model_inputs["input_embeddings"] = input_embeddings
+        if len(assistant_prompt_processed) != 0 and assistant_prompt_processed[0] != '':
+            assistant_prompt_inputs = self.tokenizer(assistant_prompt_processed, padding = True, return_tensors="pt").to(self.model.device)
+            assistant_prompt_embeddings = self.get_embeddings(assistant_prompt_inputs["input_ids"])
+        else:
+            assistant_prompt_embeddings = None
+            
+        emb_list = [emb for emb in [system_prompt_embeddings, user_prompt_embeddings, assistant_prompt_embeddings] if emb is not None]
+        input_embeddings = torch.cat(emb_list, dim=1)
 
         outputs = self.model.generate(
                 # input_ids = model_inputs['input_ids'],
-                inputs_embeds=model_inputs["input_embeddings"],
-                attention_mask = model_inputs['attention_mask'],
+                inputs_embeds=input_embeddings,
+                # attention_mask = model_inputs['attention_mask'],
                 max_new_tokens=max_new_tokens,
                 do_sample=do_sample,
                 top_p=top_p,
@@ -200,24 +220,17 @@ class Chat:
                 **kwargs
             )
 
-        full_texts = [] # the whole conversation texts
-        output_texts = [] # the model output part texts
+
+        output_texts = []
 
         for i, item in enumerate(outputs):
 
-            input_pos = model_inputs['attention_mask'][i].nonzero()
+            output_text = self.tokenizer.decode(item, skip_special_tokens=True)
 
-            input_length = input_pos.shape[0] # how many input tokens
-            start_pos = input_pos[0][0] # the first non-padding token
-
-            full_text = self.tokenizer.decode(item, skip_special_tokens=True)
-            output_text = self.tokenizer.decode(item[start_pos + input_length:], skip_special_tokens=True)
-
-            full_texts.append(full_text)
             output_texts.append(output_text)
 
         
-        return output_texts, full_texts
+        return output_texts
             
 
     def validate_conversation(self, conversation=None):
@@ -309,9 +322,15 @@ class Chat:
         elif hasattr(self.model, 'model'):
             # Assuming google/gemma-7b has a 'model' attribute for embeddings
             return self.model.model.embed_tokens(input_ids)
+        
+            # Another option I saw
+            # return model.get_input_embeddings()(input_ids)
         elif hasattr(self.model, 'embed_tokens'):
             # LLaMA-like models
             return self.model.embed_tokens(input_ids)
+        
+            # Another option I saw
+            # return model.model.embed_tokens(input_ids)
         else:
             raise ValueError(f"Model {self.model_name} does not have accessible embeddings.")
         
@@ -351,4 +370,3 @@ class Chat:
         adjusted_embeddings = embeddings - guidance_scale * combined_projections
 
         return adjusted_embeddings
-
