@@ -4,6 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from glob import glob
 
+from huggingface_hub import login
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from llm_guidance_old import LLMPipeline
 
 # create result folder
@@ -20,6 +24,32 @@ all_csv_files = [file
 
 
 
+# login()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Load a model and tokenizer
+model_name = "gpt2" #"EleutherAI/gpt-neo-2.7B"
+if device.type == "cpu":
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+elif device.type == "cuda":
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        device_map="auto",
+        torch_dtype=torch.float16,
+        use_auth_token=True
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        use_auth_token=True
+    )
+
+model = model.to(device)
+
+# Initialize the pipeline
+llm_pipeline = LLMPipeline(model=model, tokenizer=tokenizer)
+
 
 for category in all_csv_files:
     # print(category)
@@ -34,9 +64,20 @@ for category in all_csv_files:
     for index, row in df.iterrows():
         prompt=row['Prompt']
 
-        ###### Pipeline here! #####
+        output = llm_pipeline(prompt, 
+                          max_length=100, 
+                          temperature=0.9,
+                          top_k=50,
+                          top_p=0.6,
+                          do_sample=True,
+                          use_cache=True,
+                          repetition_penalty=1.0,
+                          length_penalty=1.0,
+                          stopping_criteria=None,
+                          logits_processor=None,
+                          guidance_scale=0.0)
 
-        df.loc[index, 'Output'] = "blabla" #output
+        df.loc[index, 'Output'] = output
 
 
     # save results
