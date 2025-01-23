@@ -60,9 +60,9 @@ if __name__ == "__main__":
         "top_k": 50,
         "repetition_penalty": 1.0,
         "length_penalty": 1.0,
-        "guidance_scale": 1.1,
+        "guidance_scale": 0.0,
         "save_path": "results/",
-        "eval_template": "alpaca",
+        "eval_template": "plain",
         "safety_bench": "test",
         "num_of_reps": 1,
     }
